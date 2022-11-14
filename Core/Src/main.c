@@ -93,9 +93,7 @@ float freq_view[3] = { 0, 0, 0 }; //Вывод частоты
 uint16_t freq_hits_num = 0; //Количество совпадений частоты
 /* Конец расчета частоты */
 
-
-
-uint8_t measurement_completed_flag[3] = { 0, 0, 0 }; //Флаг окончания измерений
+uint8_t flag_calc[3] = { 0, 0, 0 }; //Флаг разрешения вычислений
 
 uint8_t calculation_flag  = 0;  //Флаг начала вычислений
 uint16_t adc_val_curr[3] = { 0, 0, 0 }; //Показания АЦП
@@ -116,51 +114,39 @@ static void MX_TIM15_Init(void);
 /* USER CODE BEGIN 0 */
 void interrupt (uint8_t phase)
 {
+  /* Если измерение больше запрещенной зоны */
   if (u_mom_2[phase] > dead_zone_2)
     {
+
       if (dead_zone_flag[phase] == 1)
 	{
 	  dead_zone_flag[phase] = 0;
-	  if (measurement_completed_flag[phase] == 0)
+	  if (flag_calc[phase] == 0)
 	    {
-	      measurement_completed_flag[phase] = 1;
+	      flag_calc[phase] = 1;
 
 	      u_mom_2_sum_curr[phase] = u_mom_2_sum[phase];
 	      freq_num_of_meas_curr[phase] = freq_num_of_meas[phase];
 	      num_of_meas_curr[phase] = num_of_meas[phase];
-	      if (phase == 0)
-		{
-		  u_mom_diff_2_sum_curr[0] = u_mom_diff_2_sum[0];
-		}
 	    }
-
 	  u_mom_2_sum[phase] = 0;
 	  num_of_meas[phase] = 0;
 	  freq_num_of_meas[phase] = 0;
-	  if (phase == 0)
-	    {
-	      u_mom_diff_2_sum[0] = 0;
-	    }
-
 	}
 
       if (dead_zone_flag[phase] == 0)
 	{
-	  if (phase == 0)
-	    {
-	      u_mom_diff_2_sum[0] += u_mom_diff_2_sum[0];
-	    }
 	  u_mom_2_sum[phase] += u_mom_2[phase];
 	  ++num_of_meas[phase];
 	}
     }
+  /* Если измерение меньше запрещенной зоны */
   else
     {
       dead_zone_flag[phase] = 1;
       ++freq_num_of_meas[phase];
     }
 }
-
 
 void calculation (uint8_t phase)
 {
@@ -170,7 +156,7 @@ void calculation (uint8_t phase)
     {
       if (phase == 0)
 	{
-	  //u_l = sqrt((u_mom_diff_2_sum_curr + u_mom_diff_2_sum_prev) / (num_of_meas_curr[phase] + num_of_meas_prev[phase])) / 3;
+
       	}
       u_rms[phase] = (sqrt ((u_mom_2_sum_curr[phase] + u_mom_2_sum_prev[phase]) / (num_of_meas_curr[phase] + num_of_meas_prev[phase]))) * 0.204;
       freq_filt[phase] = freq[phase];
@@ -184,7 +170,7 @@ void calculation (uint8_t phase)
     }
 
 
-  measurement_completed_flag[phase] = 0;
+  flag_calc[phase] = 0;
 }
 
 
@@ -258,7 +244,7 @@ int main(void)
     {
 
       /*
-      if (measurement_completed_flag[0] == 1 && measurement_completed_flag[1] == 1  && measurement_completed_flag[2] == 1)
+      if (flag_calc[0] == 1 && flag_calc[1] == 1  && flag_calc[2] == 1)
       	{
 	  calculation(0);
 	  calculation(1);
@@ -569,9 +555,16 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
 
   u_mom_2[0] = (adc_val[0] - 2017) * (adc_val[0] - 2017);
+  u_mom_2[1] = (adc_val[1] - 2017) * (adc_val[1] - 2017);
+  u_mom_2[2] = (adc_val[2] - 2017) * (adc_val[2] - 2017);
+
   u_mom_diff_2[0] = ((adc_val[0] - 2017) - (adc_val[1] - 2017)) * ((adc_val[0] - 2017) - (adc_val[1] - 2017));
-  //u_mom_2[1] = (adc_val[1] - 2017) * (adc_val[1] - 2017);
-  //u_mom_2[2] = (adc_val[2] - 2017) * (adc_val[2] - 2017);
+  u_mom_diff_2[1] = ((adc_val[1] - 2017) - (adc_val[2] - 2017)) * ((adc_val[1] - 2017) - (adc_val[2] - 2017));
+  u_mom_diff_2[2] = ((adc_val[2] - 2017) - (adc_val[0] - 2017)) * ((adc_val[2] - 2017) - (adc_val[0] - 2017));
+
+  interrupt (0);
+  interrupt (1);
+  interrupt (2);
 
   if (u_mom_2[0] > dead_zone_2)
  {
