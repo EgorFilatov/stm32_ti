@@ -49,34 +49,34 @@ $(wildcard ../makefile.init) \
 $(wildcard ../makefile.targets) \
 
 
-BUILD_ARTIFACT_NAME := stm32_ti
+BUILD_ARTIFACT_NAME := test_1
 BUILD_ARTIFACT_EXTENSION := elf
 BUILD_ARTIFACT_PREFIX :=
 BUILD_ARTIFACT := $(BUILD_ARTIFACT_PREFIX)$(BUILD_ARTIFACT_NAME)$(if $(BUILD_ARTIFACT_EXTENSION),.$(BUILD_ARTIFACT_EXTENSION),)
 
 # Add inputs and outputs from these tool invocations to the build variables 
 EXECUTABLES += \
-stm32_ti.elf \
+test_1.elf \
 
 MAP_FILES += \
-stm32_ti.map \
+test_1.map \
 
 SIZE_OUTPUT += \
 default.size.stdout \
 
 OBJDUMP_LIST += \
-stm32_ti.list \
+test_1.list \
 
 
 # All Target
 all: main-build
 
 # Main-build Target
-main-build: stm32_ti.elf secondary-outputs
+main-build: test_1.elf secondary-outputs
 
 # Tool invocations
-stm32_ti.elf stm32_ti.map: $(OBJS) $(USER_OBJS) C:\Users\Egor\Desktop\STM32\stm32_ti\STM32F030R8TX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-g++ -o "stm32_ti.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m0 -T"C:\Users\Egor\Desktop\STM32\stm32_ti\STM32F030R8TX_FLASH.ld" --specs=nosys.specs -Wl,-Map="stm32_ti.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -Wl,--start-group -lc -lm -lstdc++ -lsupc++ -Wl,--end-group
+test_1.elf test_1.map: $(OBJS) $(USER_OBJS) C:\Users\e.filatov\Desktop\Enercom_R2\STM32_CODE\test_1\STM32F030R8TX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-g++ -o "test_1.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m0 -T"C:\Users\e.filatov\Desktop\Enercom_R2\STM32_CODE\test_1\STM32F030R8TX_FLASH.ld" --specs=nosys.specs -Wl,-Map="test_1.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -Wl,--start-group -lc -lm -lstdc++ -lsupc++ -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
@@ -85,14 +85,14 @@ default.size.stdout: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
 	@echo 'Finished building: $@'
 	@echo ' '
 
-stm32_ti.list: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-objdump -h -S $(EXECUTABLES) > "stm32_ti.list"
+test_1.list: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-objdump -h -S $(EXECUTABLES) > "test_1.list"
 	@echo 'Finished building: $@'
 	@echo ' '
 
 # Other Targets
 clean:
-	-$(RM) default.size.stdout stm32_ti.elf stm32_ti.list stm32_ti.map
+	-$(RM) default.size.stdout test_1.elf test_1.list test_1.map
 	-@echo ' '
 
 secondary-outputs: $(SIZE_OUTPUT) $(OBJDUMP_LIST)

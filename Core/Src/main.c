@@ -74,7 +74,7 @@ uint16_t num_of_meas[3] = { 0, 0, 0 }; //Количество измерений
 uint16_t num_of_meas_curr[3] = { 0, 0, 0 }; //Текущее количество измерений
 uint16_t num_of_meas_prev[3] = { 0, 0, 0 }; //Предыдущее количество измерений
 
-uint16_t dead_zone_2 = 900; //Квадрат мертвой зоны около опорного напряжения
+uint16_t dead_zone_2 = 400; //Квадрат мертвой зоны около опорного напряжения
 uint8_t dead_zone_flag[3] = { 0, 0, 0 }; //Флаг перехода измерения в мертвую зону
 
 /* Расчет частоты */
@@ -94,10 +94,6 @@ uint16_t freq_hits_num = 0; //Количество совпадений частоты
 /* Конец расчета частоты */
 
 uint8_t flag_calc[3] = { 0, 0, 0 }; //Флаг разрешения вычислений
-
-uint8_t calculation_flag  = 0;  //Флаг начала вычислений
-uint16_t adc_val_curr[3] = { 0, 0, 0 }; //Показания АЦП
-
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -112,12 +108,13 @@ static void MX_TIM15_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-void interrupt (uint8_t phase)
+
+/* Обработка показаний ацп */
+void adc_processing (uint8_t phase)
 {
   /* Если измерение больше запрещенной зоны */
   if (u_mom_2[phase] > dead_zone_2)
     {
-
       if (dead_zone_flag[phase] == 1)
 	{
 	  dead_zone_flag[phase] = 0;
@@ -126,16 +123,20 @@ void interrupt (uint8_t phase)
 	      flag_calc[phase] = 1;
 
 	      u_mom_2_sum_curr[phase] = u_mom_2_sum[phase];
+	      u_mom_diff_2_sum_curr[phase] = u_mom_diff_2_sum[phase];
 	      freq_num_of_meas_curr[phase] = freq_num_of_meas[phase];
 	      num_of_meas_curr[phase] = num_of_meas[phase];
 	    }
+
 	  u_mom_2_sum[phase] = 0;
+	  u_mom_diff_2_sum[phase] = 0;
 	  num_of_meas[phase] = 0;
 	  freq_num_of_meas[phase] = 0;
 	}
 
       if (dead_zone_flag[phase] == 0)
 	{
+	  u_mom_diff_2_sum[phase] += u_mom_diff_2[phase];
 	  u_mom_2_sum[phase] += u_mom_2[phase];
 	  ++num_of_meas[phase];
 	}
@@ -148,52 +149,96 @@ void interrupt (uint8_t phase)
     }
 }
 
+
+
+
+
+void adc_processing_1 ()
+{
+  if (num_of_meas[0] < 200)
+    {
+      u_mom_diff_2_sum[0] += u_mom_diff_2[0];
+      u_mom_diff_2_sum[1] += u_mom_diff_2[1];
+      u_mom_diff_2_sum[2] += u_mom_diff_2[2];
+
+      u_mom_2_sum[0] += u_mom_2[0];
+      u_mom_2_sum[1] += u_mom_2[1];
+      u_mom_2_sum[2] += u_mom_2[2];
+
+      ++num_of_meas[0];
+    }
+  if (num_of_meas[0] == 200)
+      {
+	u_rms[0] = (sqrt (u_mom_2_sum[0] / num_of_meas[0])) * 0.204;
+	u_rms[1] = (sqrt (u_mom_2_sum[1] / num_of_meas[1])) * 0.204;
+	u_rms[2] = (sqrt (u_mom_2_sum[2] / num_of_meas[2])) * 0.204;
+
+	u_l[0] = (sqrt (u_mom_diff_2_sum[0] / num_of_meas[0])) * 0.204;
+        u_l[1] = (sqrt (u_mom_diff_2_sum[1] / num_of_meas[1])) * 0.204;
+        u_l[2] = (sqrt (u_mom_diff_2_sum[2] / num_of_meas[2])) * 0.204;
+
+        u_mom_diff_2_sum[0] = 0;
+        u_mom_diff_2_sum[1] = 0;
+        u_mom_diff_2_sum[2] = 0;
+        u_mom_2_sum[0] = 0;
+        u_mom_2_sum[1] = 0;
+        u_mom_2_sum[2] = 0;
+        num_of_meas[0] = 0;
+      }
+}
+
+
+
+
+
+
+
+/* Расчет фазных и линейных напряжений */
 void calculation (uint8_t phase)
 {
-  freq[phase] = 8000 / (float) (freq_num_of_meas_curr[phase] + num_of_meas_curr[phase]);
+
+  freq[phase] = 4000 / (float) (freq_num_of_meas_curr[phase] + num_of_meas_curr[phase]);
 
   if (freq[phase] > freq_lim_low && freq[phase] < freq_lim_upp)
     {
-      if (phase == 0)
-	{
-
-      	}
       u_rms[phase] = (sqrt ((u_mom_2_sum_curr[phase] + u_mom_2_sum_prev[phase]) / (num_of_meas_curr[phase] + num_of_meas_prev[phase]))) * 0.204;
+      u_l[phase] = (sqrt ((u_mom_diff_2_sum_curr[phase] + u_mom_diff_2_sum_prev[phase]) / (num_of_meas_curr[phase] + num_of_meas_prev[phase]))) * 0.204;
       freq_filt[phase] = freq[phase];
     }
 
   u_mom_2_sum_prev[phase] = u_mom_2_sum_curr[phase];
+  u_mom_diff_2_sum_prev[phase] = u_mom_diff_2_sum_curr[phase];
   num_of_meas_prev[phase] = num_of_meas_curr[phase];
-  if (phase == 0)
-    {
-      u_mom_diff_2_sum_prev[0] = u_mom_diff_2_sum_curr[0];
-    }
-
 
   flag_calc[phase] = 0;
 }
 
 
+/* Фильтрация частоты */
 void freq_filtering (uint8_t phase)
 {
-  if (freq_filt[phase] == prev_freq[phase] && freq_hits_num < 10000)
+  if (freq_hits_num == 0)
+    {
+      prev_freq[phase] = freq_filt[phase];
+      ++freq_hits_num;
+    }
+  if (freq_filt[phase] == prev_freq[phase] && freq_hits_num != 0)
     {
       prev_freq[phase] = freq_filt[phase];
       ++freq_hits_num;
     }
 
-  if (freq_filt[phase] != prev_freq[phase])
+  if (freq_filt[phase] != prev_freq[phase] && freq_hits_num != 0)
     {
       prev_freq[phase] = freq_filt[phase];
       freq_hits_num = 0;
     }
 
-  if (freq_hits_num)
+  if (freq_hits_num  == 1050)
     {
       freq_view[phase] = prev_freq[phase];
       freq_hits_num = 0;
     }
-
 }
 
 /* USER CODE END 0 */
@@ -243,43 +288,12 @@ int main(void)
   while (1)
     {
 
-      /*
       if (flag_calc[0] == 1 && flag_calc[1] == 1  && flag_calc[2] == 1)
       	{
 	  calculation(0);
 	  calculation(1);
 	  calculation(2);
       	}
-
-      freq_filtering(0);
-      freq_filtering(1);
-      freq_filtering(2);
-      */
-
-
-      /*
-      freq_curr[0] = freq_filt[0];
-
-      if (freq_curr[0] == prev_freq_curr[0] && n < 10000)
-	{
-	  prev_freq_curr[0] = freq_curr[0];
-	  n = n + 1;
-	}
-
-      if (freq_curr[0] != prev_freq_curr[0])
-	{
-	  prev_freq_curr[0] = freq_curr[0];
-	  n = 0;
-	}
-
-      if (n == 10000)
-	{
-	  freq_view[0] = prev_freq_curr[0];
-	  n = 0;
-	}
-       */
-
-
 
     /* USER CODE END WHILE */
 
@@ -363,7 +377,7 @@ static void MX_ADC_Init(void)
   */
   sConfig.Channel = ADC_CHANNEL_1;
   sConfig.Rank = ADC_RANK_CHANNEL_NUMBER;
-  sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
+  sConfig.SamplingTime = ADC_SAMPLETIME_13CYCLES_5;
   if (HAL_ADC_ConfigChannel(&hadc, &sConfig) != HAL_OK)
   {
     Error_Handler();
@@ -486,71 +500,6 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-
-void HAL_TIM_PeriodElapsedCallback (TIM_HandleTypeDef *htim)
-{
-
-  if (htim->Instance == TIM15)
-    {
-      /*
-      adc_val_curr[0] = adc_val[0];
-      u_mom_2[0] = (adc_val_curr[0] - 2017) * (adc_val_curr[0] - 2017);
-      u_mom_diff_2 = ((adc_val_curr[0] - 2017) - (adc_val_curr[1] - 2017)) * ((adc_val_curr[0] - 2017) - (adc_val_curr[1] - 2017));
-      //u_mom_2[1] = (adc_val[1] - 2017) * (adc_val[1] - 2017);
-      //u_mom_2[2] = (adc_val[2] - 2017) * (adc_val[2] - 2017);
-
-      if (u_mom_2[0] > dead_zone_2)
-	{
-	  if (dead_zone_flag[0] == 1)
-	    {
-	      dead_zone_flag[0] = 0;
-	      freq[0] = 4000 / (float) (freq_num_of_meas[0] + num_of_meas[0]);
-
-	      if (freq[0] > freq_lim_low && freq[0] < freq_lim_upp)
-		{
-		  u_rms[0] = (sqrt ((u_mom_2_sum[0] + u_mom_2_sum_prev[0]) / (num_of_meas[0] + num_of_meas_prev[0]))) * 0.195;
-		  u_l = (u_mom_diff_2_sum);
-		  //u_l = u_mom_diff_2_sum ;
-		  freq_filt[0] = freq[0];
-		}
-
-	      u_mom_2_sum_prev[0] = u_mom_2_sum[0];
-	      num_of_meas_prev[0] = num_of_meas[0];
-	      u_mom_diff_2_sum_prev = u_mom_diff_2_sum;
-
-	      u_mom_2_sum[0] = 0;
-	      num_of_meas[0] = 0;
-	      freq_num_of_meas[0] = 0;
-	      u_mom_diff_2_sum = 0;
-	    }
-
-	  if (dead_zone_flag[0] == 0)
-	    {
-	      u_mom_diff_2_sum += u_mom_diff_2;
-	      u_mom_2_sum[0] += u_mom_2[0];
-	      ++num_of_meas[0];
-	    }
-	}
-      else
-	{
-	  dead_zone_flag[0] = 1;
-	  ++freq_num_of_meas[0];
-	}
-	*/
-
-      /*
-       u_mom_diff_2_sum = (adc_val[0] + adc_val[1] + adc_val[2] - 6051) * (adc_val[0] + adc_val[1] + adc_val[2] - 6051);
-
-       interrupt (0);
-       interrupt (1);
-       interrupt (2);
-       */
-    }
-}
-
-
-
-
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
 
@@ -558,109 +507,19 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
   u_mom_2[1] = (adc_val[1] - 2017) * (adc_val[1] - 2017);
   u_mom_2[2] = (adc_val[2] - 2017) * (adc_val[2] - 2017);
 
-  u_mom_diff_2[0] = ((adc_val[0] - 2017) - (adc_val[1] - 2017)) * ((adc_val[0] - 2017) - (adc_val[1] - 2017));
-  u_mom_diff_2[1] = ((adc_val[1] - 2017) - (adc_val[2] - 2017)) * ((adc_val[1] - 2017) - (adc_val[2] - 2017));
-  u_mom_diff_2[2] = ((adc_val[2] - 2017) - (adc_val[0] - 2017)) * ((adc_val[2] - 2017) - (adc_val[0] - 2017));
+  u_mom_diff_2[0] = (adc_val[0] - adc_val[1]) * (adc_val[0] - adc_val[1]);
+  u_mom_diff_2[1] = (adc_val[1] - adc_val[2]) * (adc_val[1] - adc_val[2]);
+  u_mom_diff_2[2] = (adc_val[2] - adc_val[0]) * (adc_val[2] - adc_val[0]);
 
-  interrupt (0);
-  interrupt (1);
-  interrupt (2);
+  //adc_processing_1();
 
-  if (u_mom_2[0] > dead_zone_2)
- {
-   if (dead_zone_flag[0] == 1)
-     {
-       dead_zone_flag[0] = 0;
-       freq[0] = 4000 / (float) (freq_num_of_meas[0] + num_of_meas[0]);
-
-       if (freq[0] > freq_lim_low && freq[0] < freq_lim_upp)
- 	{
- 	  u_rms[0] = (sqrt ((u_mom_2_sum[0] + u_mom_2_sum_prev[0]) / (num_of_meas[0] + num_of_meas_prev[0]))) * 0.195;
- 	  u_l[0] = (sqrt ((u_mom_diff_2_sum[0] + u_mom_diff_2_sum_prev[0]) / (num_of_meas[0] + num_of_meas_prev[0]))) * 0.195;
- 	  u_l[0] = u_mom_diff_2_sum[0];
- 	  freq_filt[0] = freq[0];
- 	}
-
-       u_mom_2_sum_prev[0] = u_mom_2_sum[0];
-       num_of_meas_prev[0] = num_of_meas[0];
-       u_mom_diff_2_sum_prev[0] = u_mom_diff_2_sum[0];
-
-       u_mom_2_sum[0] = 0;
-       num_of_meas[0] = 0;
-       freq_num_of_meas[0] = 0;
-       u_mom_diff_2_sum[0] = 0;
-     }
-
-   if (dead_zone_flag[0] == 0)
-     {
-       u_mom_diff_2_sum[0] += u_mom_diff_2[0];
-       u_mom_2_sum[0] += u_mom_2[0];
-       ++num_of_meas[0];
-     }
- }
-  else
- {
-   dead_zone_flag[0] = 1;
-   ++freq_num_of_meas[0];
- }
+  adc_processing (0);
+  adc_processing (1);
+  adc_processing (2);
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  /*
-  u_mom_diff_2 = ((adc_val[0] - 2017) - (adc_val[1] - 2017)) * ((adc_val[0] - 2017) - (adc_val[1] - 2017));
-  u_mom_diff_2_sum += u_mom_diff_2;
-  ++num_of_meas[0];
-
-  if (num_of_meas[0] == 100)
-    {
-      u_l = (sqrt (u_mom_diff_2_sum / num_of_meas[0])) * 0.195;
-      num_of_meas[0] = 0;
-      u_mom_diff_2_sum = 0;
-    }
-
-  HAL_ADC_Start_DMA(hadc, (uint32_t *)adc_val, 3);
-  */
   HAL_ADC_Start_DMA(hadc, (uint32_t *)adc_val, 3);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /* USER CODE END 4 */
 
 /**
