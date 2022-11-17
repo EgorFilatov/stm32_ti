@@ -47,6 +47,7 @@
 ADC_HandleTypeDef hadc;
 DMA_HandleTypeDef hdma_adc;
 
+TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim15;
 
 /* USER CODE BEGIN PV */
@@ -94,6 +95,11 @@ uint16_t freq_hits_num = 0; //Количество совпадений частоты
 /* Конец расчета частоты */
 
 uint8_t flag_calc[3] = { 0, 0, 0 }; //Флаг разрешения вычислений
+
+int32_t period = 0;
+int32_t pulse_width = 0;
+float fr = 0; //Вывод частоты
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -102,6 +108,7 @@ static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_ADC_Init(void);
 static void MX_TIM15_Init(void);
+static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -241,6 +248,33 @@ void freq_filtering (uint8_t phase)
     }
 }
 
+
+void freq_filtering_1 (uint8_t phase)
+{
+  if (freq_hits_num == 0)
+    {
+      prev_freq[phase] = fr;
+      ++freq_hits_num;
+    }
+  if (fr == prev_freq[phase] && freq_hits_num != 0)
+    {
+      prev_freq[phase] = fr;
+      ++freq_hits_num;
+    }
+
+  if (fr != prev_freq[phase] && freq_hits_num != 0)
+    {
+      prev_freq[phase] = fr;
+      freq_hits_num = 0;
+    }
+
+  if (freq_hits_num  == 10)
+    {
+      freq_view[phase] = prev_freq[phase];
+      freq_hits_num = 0;
+    }
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -274,19 +308,25 @@ int main(void)
   MX_DMA_Init();
   MX_ADC_Init();
   MX_TIM15_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
+
   HAL_ADCEx_Calibration_Start(&hadc);
   HAL_ADC_Start_DMA(&hadc, (uint32_t *)adc_val, 3);
-  //HAL_ADC_Start_IT(&hadc);
 
   HAL_TIM_Base_Start(&htim15);
   HAL_TIM_Base_Start_IT(&htim15);
+
+  HAL_TIM_IC_Start_IT(&htim3, TIM_CHANNEL_1);
+  HAL_TIM_IC_Start_IT(&htim3, TIM_CHANNEL_2);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
     {
+
 
       if (flag_calc[0] == 1 && flag_calc[1] == 1  && flag_calc[2] == 1)
       	{
@@ -317,7 +357,10 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
   RCC_OscInitStruct.HSI14State = RCC_HSI14_ON;
   RCC_OscInitStruct.HSI14CalibrationValue = 16;
-  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL2;
+  RCC_OscInitStruct.PLL.PREDIV = RCC_PREDIV_DIV2;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -326,7 +369,7 @@ void SystemClock_Config(void)
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSE;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
 
@@ -399,6 +442,70 @@ static void MX_ADC_Init(void)
   /* USER CODE BEGIN ADC_Init 2 */
 
   /* USER CODE END ADC_Init 2 */
+
+}
+
+/**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+
+  /* USER CODE BEGIN TIM3_Init 0 */
+
+  /* USER CODE END TIM3_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_IC_InitTypeDef sConfigIC = {0};
+
+  /* USER CODE BEGIN TIM3_Init 1 */
+
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 15;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 64999;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_IC_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_RISING;
+  sConfigIC.ICSelection = TIM_ICSELECTION_DIRECTTI;
+  sConfigIC.ICPrescaler = TIM_ICPSC_DIV1;
+  sConfigIC.ICFilter = 0;
+  if (HAL_TIM_IC_ConfigChannel(&htim3, &sConfigIC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_FALLING;
+  sConfigIC.ICSelection = TIM_ICSELECTION_INDIRECTTI;
+  if (HAL_TIM_IC_ConfigChannel(&htim3, &sConfigIC, TIM_CHANNEL_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM3_Init 2 */
+
+  /* USER CODE END TIM3_Init 2 */
 
 }
 
@@ -502,7 +609,6 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
-
   u_mom_2[0] = (adc_val[0] - 2017) * (adc_val[0] - 2017);
   u_mom_2[1] = (adc_val[1] - 2017) * (adc_val[1] - 2017);
   u_mom_2[2] = (adc_val[2] - 2017) * (adc_val[2] - 2017);
@@ -511,15 +617,30 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
   u_mom_diff_2[1] = (adc_val[1] - adc_val[2]) * (adc_val[1] - adc_val[2]);
   u_mom_diff_2[2] = (adc_val[2] - adc_val[0]) * (adc_val[2] - adc_val[0]);
 
-  //adc_processing_1();
-
   adc_processing (0);
   adc_processing (1);
   adc_processing (2);
 
-
   HAL_ADC_Start_DMA(hadc, (uint32_t *)adc_val, 3);
 }
+
+void HAL_TIM_IC_CaptureCallback (TIM_HandleTypeDef *htim)
+{
+  if (htim->Instance == TIM3)
+    {
+      if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1)
+	{
+	  TIM3->CNT = 0;
+
+	  period = HAL_TIM_ReadCapturedValue (&htim3, TIM_CHANNEL_1);
+	  pulse_width = HAL_TIM_ReadCapturedValue (&htim3, TIM_CHANNEL_2);
+	  fr = 1000000.0/(float)(period/2);
+	  freq_filtering_1 (0);
+	}
+    }
+}
+
+
 /* USER CODE END 4 */
 
 /**
